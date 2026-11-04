@@ -267,5 +267,11 @@
       "transport": "",
       "done": false
     }
-  ]
+  ],
+  "hotel": {
+    "name": "The Bund Puyan Hotel, Shanghai",
+    "zh": "上海外滩璞硯酒店",
+    "address": "上海市黄浦区北京东路398号",
+    "note": "기존 메모: 체크인 16:00 / 얼리 체크인 및 짐 보관 별도 확인"
+  }
 }
