@@ -96,7 +96,7 @@ const BASE_HOTEL=[
   ['The Bund Puyan Hotel','上海外滩璞硐酒店','上海市黄浦区北京东路398号','체크인 16:00 / 얼리 체크인 확인']
 ];
 
-function makeEnv({keyValue=TEST_KEY,rows=BASE_ROWS,hotel=BASE_HOTEL}={}){
+function makeEnv({keyValue=TEST_KEY,rows=BASE_ROWS,hotel=BASE_HOTEL,makeApi=factory}={}){
   const ss=new MockSpreadsheet('상하이 가족여행(테스트)');
   const origin=ss.insertSheet(ORIGIN_TAB);
   [['원본','탭'],['보존','대상']].forEach((rr,i)=>rr.forEach((v,j)=>origin.set(i+1,j+1,v)));
@@ -108,7 +108,7 @@ function makeEnv({keyValue=TEST_KEY,rows=BASE_ROWS,hotel=BASE_HOTEL}={}){
   const lockSvc={getScriptLock:()=>({waitLock(){lockSt.wait++;lockSt.locked=true;},hasLock:()=>lockSt.locked,releaseLock(){lockSt.release++;lockSt.locked=false;}})};
   const opened=[];const stats={flushes:0};
   const SpreadsheetApp={openById(id){opened.push(id);if(id!==SPREADSHEET_ID)throw new Error('잘못된 시트 ID: '+id);return ss;},flush(){stats.flushes++;}};
-  const api=factory(SpreadsheetApp,propsSvc,lockSvc,ContentService,makeUtilities());
+  const api=makeApi(SpreadsheetApp,propsSvc,lockSvc,ContentService,makeUtilities());
   return {ss,api,call:body=>JSON.parse(api.doPost({postData:{contents:JSON.stringify(body)}}).__text),opened,stats,lockSt};
 }
 const find=(env,name)=>env.ss.getSheetByName(name);
@@ -352,6 +352,22 @@ section('14. 순수 함수 직접 검증');
   ok(api.normalizeDay('곧',null,'Asia/Shanghai')===null&&api.normalizeDay('',null,'Asia/Shanghai')===null,'파싱 불가·빈 값은 null');
   ok(api.normalizeDay('2026. 12. 7.',new Date(2026,11,6),'Asia/Shanghai')==='2026-12-06','날짜 유형 셀이 우선');
   ok(api.isDone('TRUE')&&api.isDone('완료')&&api.isDone('1')&&api.isDone('v')&&!api.isDone('false')&&!api.isDone(''),'완료 판정');
+}
+
+section('15. FAMILY_KEY 폴백 — 스크립트 속성 없이 코드 상수로 인증');
+{
+  const FALLBACK='fallback-dummy-key-abcdef123456';
+  const patched=src.replace("const FAMILY_KEY_FALLBACK = ''","const FAMILY_KEY_FALLBACK = '"+FALLBACK+"'");
+  const factory2=new Function('SpreadsheetApp','PropertiesService','LockService','ContentService','Utilities',patched+'\n;return {doPost};');
+  const noProp=makeEnv({keyValue:null,makeApi:factory2});
+  ok(noProp.call({action:'read',key:FALLBACK}).ok===true,'속성 없음 + 코드 상수 → 상수 키로 read 성공');
+  ok(noProp.call({action:'read',key:'wrong-key-1234567890'}).ok===false,'상수 키 불일치 → 거부');
+  ok(noProp.call({action:'write',key:'wrong-key-1234567890',revision:'x',data:{items:[]}}).ok===false&&find(noProp,SCHEDULE_TAB).writes.length===0,'상수 키 없는 쓰기 → 차단');
+  const propWins=makeEnv({makeApi:factory2});
+  ok(propWins.call({action:'read',key:FALLBACK}).ok===false,'속성이 있으면 속성이 우선(상수 무시)');
+  ok(propWins.call({action:'read',key:TEST_KEY}).ok===true,'속성 키로는 정상 동작');
+  const both=makeEnv({keyValue:null});
+  ok(both.call({action:'read',key:'any'}).ok===false,'속성·상수 모두 없으면 거부');
 }
 
 console.log('\n──────────────────────────────');

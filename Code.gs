@@ -17,6 +17,7 @@ const HOTEL_HEADERS = ['숙소명','중국어 숙소명','중국어 주소','메
 const TRIP_DAYS = ['2026-12-05','2026-12-06','2026-12-07','2026-12-08'];
 const SERVICE = 'shanghai-family-trip-sync';
 const VERSION = 'v2';
+const FAMILY_KEY_FALLBACK = ''; // 비워 두면 스크립트 속성 FAMILY_KEY만 사용. 저장소에는 항상 비워 둡니다.
 
 function doGet(){
   // 배포·권한 상태 확인용 ping. 일정·숙소 데이터는 포함하지 않습니다.
@@ -32,9 +33,9 @@ function doPost(e){
     const req = e && e.postData && e.postData.contents ? JSON.parse(String(e.postData.contents).trim()) : null;
     if(!req || typeof req.action !== 'string') throw new Error('요청 형식이 올바르지 않습니다.');
     if(req.action === 'ping') return output(pingResult());
-    const secret = PropertiesService.getScriptProperties().getProperty('FAMILY_KEY');
+    const secret = PropertiesService.getScriptProperties().getProperty('FAMILY_KEY') || FAMILY_KEY_FALLBACK;
     if(!secret || String(secret).length < 20 || req.key !== secret){
-      throw new Error('가족 연결 암호를 확인하세요. FAMILY_KEY는 스크립트 속성에 20자 이상으로 설정되어 있어야 합니다.');
+      throw new Error('가족 연결 암호를 확인하세요. Apps Script 스크립트 속성의 FAMILY_KEY(20자 이상) 또는 코드의 FAMILY_KEY_FALLBACK 설정이 필요합니다.');
     }
     if(['read','write','seed'].indexOf(req.action) < 0) throw new Error('지원하지 않는 작업입니다.');
     const lock = LockService.getScriptLock();
