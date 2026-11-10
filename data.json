@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-04T10:00:00Z",
-  "updatedBy": "초기 일정",
+  "updatedAt": "2026-11-10T00:00:00Z",
+  "updatedBy": "항공 좌석 배정 추가",
   "items": [
     {
       "id": "item-1",
@@ -273,5 +273,31 @@
     "zh": "上海外滩璞硯酒店",
     "address": "上海市黄浦区北京东路398号",
     "note": "기존 메모: 체크인 16:00 / 얼리 체크인 및 짐 보관 별도 확인"
+  },
+  "flights": {
+    "outbound": {
+      "seats": [
+        {"seat": "38A", "name": "김병훈"},
+        {"seat": "38B", "name": "김민지"},
+        {"seat": "39A", "name": "정혜영"},
+        {"seat": "39B", "name": "김민준"},
+        {"seat": "40A", "name": "박소현"},
+        {"seat": "40B", "name": "김민솔"},
+        {"seat": "41A", "name": "전지온"},
+        {"seat": "41B", "name": "김병현"}
+      ]
+    },
+    "inbound": {
+      "seats": [
+        {"seat": "41A", "name": "김병현"},
+        {"seat": "41B", "name": "김민솔"},
+        {"seat": "41C", "name": "박소현"},
+        {"seat": "42A", "name": "전지온"},
+        {"seat": "42C", "name": "김민준"},
+        {"seat": "43A", "name": "김병훈"},
+        {"seat": "43B", "name": "김민지"},
+        {"seat": "43C", "name": "정혜영"}
+      ]
+    }
   }
 }

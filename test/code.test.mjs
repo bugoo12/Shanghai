@@ -9,6 +9,7 @@ import {createHash, randomUUID} from 'node:crypto';
 const SPREADSHEET_ID = '1lpoAC1WBGzQ2WhT4crZ6sYi7cuOEuuTo9Ms03fD2RhM';
 const SCHEDULE_TAB = '대시보드 일정';
 const HOTEL_TAB = '대시보드 숙소';
+const SEATS_TAB = '대시보드 좌석';
 const ORIGIN_TAB = '시트1';
 const TEST_KEY = 'unit-test-dummy-key-abcdef123456'; // 27자 테스트용 더미 (실제 암호 아님)
 
@@ -123,11 +124,12 @@ section('0. ping — 키 없이 배포·권한 상태만 확인');
 {
   const env=makeEnv();
   const ping=JSON.parse(env.api.doGet().__text);
-  ok(ping.ok===true&&ping.service==='shanghai-family-trip-sync'&&ping.version==='v2','doGet ping이 서비스·버전을 반환');
+  ok(ping.ok===true&&ping.service==='shanghai-family-trip-sync'&&ping.version==='v2.1','doGet ping이 서비스·버전을 반환');
   ok(ping.spreadsheet==='상하이 가족여행(테스트)'&&ping.scheduleTab===true&&ping.hotelTab===true,'스프레드시트·두 연결 탭 접근 확인');
+  ok(ping.seatsTab===false,'좌석 탭이 없으면 ping에 false');
   ok(!('items' in ping)&&!('data' in ping),'ping에는 일정·숙소 데이터가 없음');
   const viaPost=env.call({action:'ping'});
-  ok(viaPost.ok===true&&viaPost.version==='v2','POST ping도 동일하게 동작');
+  ok(viaPost.ok===true&&viaPost.version==='v2.1','POST ping도 동일하게 동작');
   ok(find(env,SCHEDULE_TAB).writes.length===0,'ping은 시트를 수정하지 않음');
   ok(env.opened[0]===SPREADSHEET_ID,'지정된 문서 ID로만 엶');
 }
@@ -368,6 +370,48 @@ section('15. FAMILY_KEY 폴백 — 스크립트 속성 없이 코드 상수로 �
   ok(propWins.call({action:'read',key:TEST_KEY}).ok===true,'속성 키로는 정상 동작');
   const both=makeEnv({keyValue:null});
   ok(both.call({action:'read',key:'any'}).ok===false,'속성·상수 모두 없으면 거부');
+}
+
+section('16. 좌석 동기화 — ‘대시보드 좌석’ 탭 양방향');
+{
+  const seats={outbound:{seats:[{seat:'38A',name:'김병훈'},{seat:'38B',name:'김민지'},{seat:'39A',name:'정혜영'},{seat:'39B',name:'김민준'},{seat:'40A',name:'박소현'},{seat:'40B',name:'김민솔'},{seat:'41A',name:'전지온'},{seat:'41B',name:'김병현'}]},inbound:{seats:[{seat:'41A',name:'김병현'},{seat:'41B',name:'김민솔'},{seat:'41C',name:'박소현'},{seat:'42A',name:'전지온'},{seat:'42C',name:'김민준'},{seat:'43A',name:'김병훈'},{seat:'43B',name:'김민지'},{seat:'43C',name:'정혜영'}]}};
+  const env=makeEnv();
+  const r=env.call({action:'read',key:TEST_KEY});
+  ok(r.ok===true&&!r.data.flights,'좌석 탭이 비어 있으면 flights 없이 반환');
+  ok(!!find(env,SEATS_TAB)&&find(env,SEATS_TAB).writes.every(w=>w.row===1),'read는 헤더만 만들고 데이터 행은 기록하지 않음');
+  const w=env.call({action:'write',key:TEST_KEY,revision:r.revision,data:{items:r.data.items,hotel:r.data.hotel,flights:seats}});
+  ok(w.ok===true&&w.data.flights&&w.data.flights.outbound.seats.length===8&&w.data.flights.inbound.seats.length===8,'대시보드 좌석 16석 저장 후 읽기에 반영');
+  const s=find(env,SEATS_TAB);
+  ok(String(s.get(2,1))==='가는'&&String(s.get(2,2))==='38A'&&String(s.get(2,3))==='김병훈','가는 편 첫 좌석 행 저장');
+  ok(String(s.get(9,2))==='41B'&&String(s.get(10,1))==='오는'&&String(s.get(10,3))==='김병현','가는 8행 뒤에 오는 편 이어서 저장');
+  ok(String(s.get(17,2))==='43C'&&String(s.get(17,3))==='정혜영','마지막 좌석(43C) 저장');
+  const ping2=JSON.parse(env.api.doGet().__text);
+  ok(ping2.seatsTab===true,'ping이 좌석 탭 존재 확인');
+  const r2=env.call({action:'read',key:TEST_KEY});
+  ok(r2.ok===true&&r2.revision===w.revision,'좌석 저장 후 재읽기 revision 안정');
+  s.getRange(3,2).setValue('38C'); // 시트에서 직접 좌석 수정
+  const r3=env.call({action:'read',key:TEST_KEY});
+  ok(r3.data.flights.outbound.seats[1].seat==='38C','시트에서 수정한 좌석이 대시보드에 반영');
+  ok(r3.revision!==r2.revision,'좌석 수정도 revision 변경(충돌 감지)');
+  s.getRange(2,1).setValue('간다');
+  const bad=env.call({action:'read',key:TEST_KEY});
+  ok(bad.ok===false&&/2행/.test(bad.error)&&/방향/.test(bad.error),'잘못된 방향: 행 번호와 안내');
+  s.getRange(2,1).setValue('가는');
+  s.getRange(18,1,1,3).setValues([['가는','38A','중복 시도']]);
+  const dup=env.call({action:'read',key:TEST_KEY});
+  ok(dup.ok===false&&/18행/.test(dup.error)&&/중복/.test(dup.error),'같은 방향 좌석 중복 감지');
+  s.getRange(18,1,1,3).clearContent();
+  const rev=env.call({action:'read',key:TEST_KEY}).revision;
+  const badSeats={outbound:{seats:[{seat:'38A',name:'김병훈'},{seat:'38A',name:'중복'}]},inbound:{seats:[]}};
+  const w2=env.call({action:'write',key:TEST_KEY,revision:rev,data:{items:r.data.items,hotel:r.data.hotel,flights:badSeats}});
+  ok(w2.ok===false&&/좌석 형식/.test(w2.error),'대시보드 쪽 중복 좌석 저장 거부');
+  ok(String(s.get(2,3))==='김병훈','거부 시 시트 좌석이 덮어쓰기되지 않음');
+  const empty=makeEnv({rows:[SCHEDULE_HEADER],hotel:[HOTEL_HEADER]});
+  const r4=empty.call({action:'seed',key:TEST_KEY,data:{items:[{id:'item-1',day:'2026-12-05',time:'12:35',title:'푸동공항 도착',zh:'',transport:'',note:'',status:'기존',done:false}],hotel:{name:'The Bund Puyan Hotel',zh:'상하이 호텔',address:'상하이 주소',note:'초기 메모'},flights:seats}});
+  ok(r4.ok===true&&r4.data.flights&&r4.data.flights.outbound.seats.length===8,'빈 시트 seed에 좌석 포함');
+  const cleared=empty.call({action:'write',key:TEST_KEY,revision:r4.revision,data:{items:r4.data.items,hotel:r4.data.hotel,flights:{outbound:{seats:[]},inbound:{seats:[]}}}});
+  ok(cleared.ok===true&&!cleared.data.flights,'빈 좌석 목록 저장 시 좌석 탭 비움(삭제 경로)');
+  ok(find(env,ORIGIN_TAB).writes.length===0&&find(empty,ORIGIN_TAB).writes.length===0,'좌석 작업 중에도 원본 시트1 untouched');
 }
 
 console.log('\n──────────────────────────────');

@@ -1,5 +1,5 @@
-/* 상하이 가족여행 — Google Sheets 양방향 연결 (v2)
- * 원본 ‘시트1’ 탭은 절대 건드리지 않고 ‘대시보드 일정’·‘대시보드 숙소’ 탭만 사용합니다.
+/* 상하이 가족여행 — Google Sheets 양방향 연결 (v2.1)
+ * 원본 ‘시트1’ 탭은 절대 건드리지 않고 ‘대시보드 일정’·‘대시보드 숙소’·‘대시보드 좌석’ 탭만 사용합니다.
  * 스크립트 속성 FAMILY_KEY에 20자 이상의 긴 임의 암호를 먼저 설정하세요.
  *
  * v2 변경점
@@ -7,16 +7,21 @@
  *  - 날짜·시간을 표준 형식(2026-12-06 / 09:30)으로 정규화하고 텍스트(@) 서식으로 고정해
  *    스프레드시트가 값을 자동 변형하지 않도록 합니다.
  *  - ping 작업은 연결 암호 없이 배포·권한 상태만 확인합니다(일정·숙소 데이터는 반환하지 않음).
+ *
+ * v2.1 변경점
+ *  - 항공 좌석 배정(가는/오는 편 · 좌석 · 이름)을 ‘대시보드 좌석’ 탭과 양방향 동기화합니다.
  */
 
 const SPREADSHEET_ID = '1lpoAC1WBGzQ2WhT4crZ6sYi7cuOEuuTo9Ms03fD2RhM';
 const SCHEDULE_TAB = '대시보드 일정';
 const HOTEL_TAB = '대시보드 숙소';
+const SEATS_TAB = '대시보드 좌석';
 const HEADERS = ['ID','날짜','시간','일정','중국어 장소(간체)','이동수단','메모','구분','완료'];
 const HOTEL_HEADERS = ['숙소명','중국어 숙소명','중국어 주소','메모'];
+const SEAT_HEADERS = ['방향','좌석','이름'];
 const TRIP_DAYS = ['2026-12-05','2026-12-06','2026-12-07','2026-12-08'];
 const SERVICE = 'shanghai-family-trip-sync';
-const VERSION = 'v2';
+const VERSION = 'v2.1';
 const FAMILY_KEY_FALLBACK = ''; // 비워 두면 스크립트 속성 FAMILY_KEY만 사용. 저장소에는 항상 비워 둡니다.
 
 function doGet(){
@@ -55,6 +60,9 @@ function doPost(e){
       if(req.data && req.data.hotel && (!req.data.hotel.name || !req.data.hotel.zh || !req.data.hotel.address)){
         throw new Error('숙소명과 중국어 주소를 확인하세요.');
       }
+      if(req.data && req.data.flights !== undefined && !validSeats(req.data.flights)){
+        throw new Error('좌석 형식을 확인하세요. 가는/오는 편(outbound/inbound)의 좌석·이름 목록이 필요합니다.');
+      }
       const ids = {};
       const rows = items.map(item=>{
         if(!item.id || ids[item.id] || !/^2026-12-0[5-8]$/.test(item.day) || !String(item.title||'').trim()){
@@ -66,6 +74,7 @@ function doPost(e){
       });
       writeSchedule(ss, rows, current.data.items.length);
       if(req.data.hotel) writeHotel(ss, req.data.hotel);
+      if(req.data.flights) writeSeats(ss, req.data.flights);
       SpreadsheetApp.flush();
       return output({ok:true, ...readAll(ss)});
     }finally{
@@ -84,6 +93,7 @@ function pingResult(){
     out.spreadsheet = String(ss.getName());
     out.scheduleTab = !!ss.getSheetByName(SCHEDULE_TAB);
     out.hotelTab = !!ss.getSheetByName(HOTEL_TAB);
+    out.seatsTab = !!ss.getSheetByName(SEATS_TAB);
   }catch(err){
     out.ok = false;
     out.error = '스프레드시트 접근 권한을 확인해주세요: ' + String((err && err.message) || err);
@@ -225,6 +235,8 @@ function readAll(ss){
   const base = readSheet(ss, scheduleSheet(ss));
   const hotel = readHotel(ss);
   if(hotel) base.data.hotel = hotel;
+  const seats = readSeats(ss);
+  if(seats) base.data.flights = seats;
   base.revision = hash(base.data);
   return base;
 }
@@ -248,4 +260,84 @@ function writeHotel(ss, hotel){
   if(!hotel || !hotel.name || !hotel.zh || !hotel.address) throw new Error('숙소명과 중국어 주소를 확인하세요.');
   const values = [hotel.name, hotel.zh, hotel.address, hotel.note || ''].map(escapeCell);
   hotelSheet(ss).getRange(2,1,1,4).setNumberFormat('@').setValues([values]).setWrap(true);
+}
+
+/* ---------- 항공 좌석 (‘대시보드 좌석’ 탭) ---------- */
+
+function seatsSheet(ss){
+  let s = ss.getSheetByName(SEATS_TAB);
+  if(!s){
+    s = ss.insertSheet(SEATS_TAB);
+    s.getRange(1,1,1,3).setValues([SEAT_HEADERS]);
+    s.setFrozenRows(1);
+    s.getRange('A:C').setNumberFormat('@');
+    s.getRange(1,1,1,3).setBackground('#173e42').setFontColor('#ffffff').setFontWeight('bold');
+    s.setColumnWidth(1,70); s.setColumnWidth(2,90); s.setColumnWidth(3,140);
+  }
+  return s;
+}
+
+/* 대시보드 → 시트 저장 직전 형식 검증. 방향별 좌석 중복, 빈 값, 행 수 초과를 확인합니다. */
+function validSeats(flights){
+  if(!flights || typeof flights !== 'object' || Array.isArray(flights)) return false;
+  for(const dir of ['outbound','inbound']){
+    const seats = flights[dir] && flights[dir].seats;
+    if(seats === undefined) continue;
+    if(!Array.isArray(seats) || seats.length > 100) return false;
+    const seen = {};
+    for(const s of seats){
+      const seat = String((s && s.seat) || '').trim();
+      const name = String((s && s.name) || '').trim();
+      if(!seat || !name || seat.length > 8 || name.length > 60 || seen[seat]) return false;
+      seen[seat] = true;
+    }
+  }
+  return true;
+}
+
+/* 시트 → 대시보드 좌석. 비어 있으면 null을 돌려주고, 잘못된 행은 행 번호와 함께 안내합니다. */
+function readSeats(ss){
+  const sheet = seatsSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if(lastRow < 2) return null;
+  const rows = sheet.getRange(2,1,lastRow-1,3).getDisplayValues();
+  const outbound = [];
+  const inbound = [];
+  const seen = {};
+  for(let r=0; r<rows.length; r++){
+    const rowNo = r + 2;
+    const row = rows[r].map(v=>String(v||'').trim());
+    if(!row.some(Boolean)) continue; // 완전히 빈 행은 건너뜁니다
+    const dir = row[0];
+    if(dir !== '가는' && dir !== '오는'){
+      throw new Error('좌석 ' + rowNo + '행: 방향을 "가는" 또는 "오는"으로 입력하세요. (현재 값: "' + dir.slice(0,20) + '")');
+    }
+    const seat = row[1];
+    const name = row[2];
+    if(!seat || !name) throw new Error('좌석 ' + rowNo + '행: 좌석과 이름을 모두 입력하세요.');
+    const key = dir + ' ' + seat;
+    if(seen[key]) throw new Error('좌석 ' + rowNo + '행: ' + dir + ' 편에 좌석 ' + seat + '이(가) 중복됩니다.');
+    seen[key] = true;
+    (dir === '가는' ? outbound : inbound).push({seat:seat, name:name});
+  }
+  if(!outbound.length && !inbound.length) return null;
+  return {outbound:{seats:outbound}, inbound:{seats:inbound}};
+}
+
+/* 대시보드 → 시트 좌석. 사용한 범위를 지우고 텍스트 서식으로 채워 넣습니다. */
+function writeSeats(ss, flights){
+  if(!validSeats(flights)) throw new Error('좌석 형식을 확인하세요.');
+  const rows = [];
+  [['가는','outbound'],['오는','inbound']].forEach(pair=>{
+    const seats = flights[pair[1]] && flights[pair[1]].seats;
+    (Array.isArray(seats) ? seats : []).forEach(s=>{
+      rows.push([escapeCell(pair[0]), escapeCell(String(s.seat||'').trim()), escapeCell(String(s.name||'').trim())]);
+    });
+  });
+  const sheet = seatsSheet(ss);
+  const previous = Math.max(sheet.getLastRow() - 1, 0);
+  const count = Math.max(rows.length, previous);
+  if(count > 0) sheet.getRange(2,1,count,3).clearContent().setNumberFormat('@');
+  if(rows.length) sheet.getRange(2,1,rows.length,3).setValues(rows).setWrap(true);
+  SpreadsheetApp.flush();
 }
