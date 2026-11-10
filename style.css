@@ -21,5 +21,18 @@
 .wx-detail dt{font-size:10px;letter-spacing:1.5px;color:var(--muted);font-weight:800}
 .wx-detail dd{margin:0;font-weight:800;font-size:14px}
 .wx-time{margin-left:auto;font-size:11px;color:var(--muted);font-weight:700}
-@media(max-width:760px){.weather{margin:20px 0 30px}.weather-head{margin-bottom:9px}.weather-now{gap:14px;padding:14px 16px}.wx-icon{font-size:28px}.wx-main{gap:7px}.wx-main b{font-size:26px}.wx-detail{gap:16px}.wx-time{margin-left:0;width:100%}.seats{padding:12px 16px 16px}.seats li{font-size:11px}}
+/* 5일 예보 */
+.wx-forecast{margin-top:10px}
+.wx-days-label{display:block;font-size:9px;font-weight:800;letter-spacing:2px;color:var(--muted);margin:0 0 8px 2px}
+.wx-days{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.wx-day{background:white;border:1px solid var(--line);border-radius:12px;padding:10px 6px 9px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
+.wx-day.today{border-color:var(--gold);background:#f8f1e4}
+.wx-day-when{font-size:11px;font-weight:800}
+.wx-day-date{font-size:10px;color:var(--muted);font-weight:700;margin-top:-3px}
+.wx-day-icon{font-size:22px;line-height:1.15}
+.wx-day-temp{font-size:13px;font-weight:800}
+.wx-day-temp small{font-size:11px;color:var(--muted);font-weight:700}
+.wx-day-pop{font-size:10px;color:var(--muted);font-weight:700}
+.wx-day-pop.wet{color:#2563a8;font-weight:800}
+@media(max-width:760px){.weather{margin:20px 0 30px}.weather-head{margin-bottom:9px}.weather-now{gap:14px;padding:14px 16px}.wx-icon{font-size:28px}.wx-main{gap:7px}.wx-main b{font-size:26px}.wx-detail{gap:16px}.wx-time{margin-left:0;width:100%}.seats{padding:12px 16px 16px}.seats li{font-size:11px}.wx-days{gap:5px}.wx-day{padding:8px 3px 7px;border-radius:10px}.wx-day-icon{font-size:19px}.wx-day-temp{font-size:12px}.wx-day-when{font-size:10px}.wx-day-date,.wx-day-pop{font-size:9px}}
 @media print{.seats{break-inside:avoid}.weather{margin:12px 0 16px}}
