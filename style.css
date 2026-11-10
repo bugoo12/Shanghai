@@ -36,3 +36,27 @@
 .wx-day-pop.wet{color:#2563a8;font-weight:800}
 @media(max-width:760px){.weather{margin:20px 0 30px}.weather-head{margin-bottom:9px}.weather-now{gap:14px;padding:14px 16px}.wx-icon{font-size:28px}.wx-main{gap:7px}.wx-main b{font-size:26px}.wx-detail{gap:16px}.wx-time{margin-left:0;width:100%}.seats{padding:12px 16px 16px}.seats li{font-size:11px}.wx-days{gap:5px}.wx-day{padding:8px 3px 7px;border-radius:10px}.wx-day-icon{font-size:19px}.wx-day-temp{font-size:12px}.wx-day-when{font-size:10px}.wx-day-date,.wx-day-pop{font-size:9px}}
 @media print{.seats{break-inside:avoid}.weather{margin:12px 0 16px}}
+/* v2.2 일정 상세·분류·주소 복사 */
+.badges{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 4px;align-items:center}
+.kind{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;letter-spacing:.5px;border:1px solid transparent}
+.k-food{background:#fdeee0;color:#9a5b13;border-color:#ecd9bd}
+.k-sight{background:#e3f0e7;color:#2f6c4f;border-color:#cfe5d6}
+.k-move{background:#e3eef4;color:#2d5f88;border-color:#cfe0ec}
+.k-rest{background:#efe9f6;color:#5f4b8b;border-color:#e0d6ee}
+.k-etc{background:#f0f0ec;color:#667b7b;border-color:#dddcd2}
+.party{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;background:#fbeaea;color:#a14232;border:1px solid #efd2cd}
+.foods{font-size:13px;font-weight:700;margin:6px 0 2px;color:var(--ink);line-height:1.5;word-break:break-word}
+.addr-row{display:flex;align-items:center;gap:8px;margin:6px 0 2px;flex-wrap:wrap}
+.addr{font-size:13px;color:var(--ink);word-break:break-all;line-height:1.4}
+button.copy{font-size:11px;padding:3px 9px;border-radius:7px;white-space:nowrap}
+.detail{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
+.detail summary{cursor:pointer;font-size:12px;font-weight:800;color:var(--muted);list-style:none;user-select:none}
+.detail summary::before{content:'▸ ';display:inline-block}
+.detail[open] summary::before{content:'▾ '}
+.detail summary::-webkit-details-marker{display:none}
+.detail-body{margin-top:6px;display:flex;flex-direction:column;gap:6px}
+.detail-body .place{margin:0}
+.detail-body p{margin:0}
+#fold{font-size:12px;padding:6px 10px}
+@media(max-width:760px){.badges{gap:3px}.kind{font-size:9px;padding:2px 6px}.party{font-size:9px;padding:2px 6px}.foods{font-size:12px}.addr{font-size:12px}.button.copy{font-size:10px;padding:2px 7px}.detail summary{font-size:11px}.event{grid-template-columns:58px 1fr;gap:8px;padding:14px 16px}.event .time{font-size:11px}.event h3{font-size:15px}.event p{font-size:12px;margin:6px 0}.event .actions{gap:6px}.event button{font-size:11px;padding:5px 8px}}
+@media print{.details .detail{display:block}.detail summary{display:none}.detail-body{display:block}.detail-body>*{display:block}#fold,.view-controls{display:none!important}}

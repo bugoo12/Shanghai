@@ -10,18 +10,22 @@
  *
  * v2.1 변경점
  *  - 항공 좌석 배정(가는/오는 편 · 좌석 · 이름)을 ‘대시보드 좌석’ 탭과 양방향 동기화합니다.
+ *
+ * v2.2 변경점
+ *  - 일정 항목에 주소(간체)·추천 음식·분류(관광/식당/이동/휴식/기타)를 J·K·L 열에 추가했습니다.
+ *  - 기존 9열 시트를 읽을 때 헤더를 12열로 자동 이전합니다(데이터 행은 그대로 보존).
  */
 
 const SPREADSHEET_ID = '1lpoAC1WBGzQ2WhT4crZ6sYi7cuOEuuTo9Ms03fD2RhM';
 const SCHEDULE_TAB = '대시보드 일정';
 const HOTEL_TAB = '대시보드 숙소';
 const SEATS_TAB = '대시보드 좌석';
-const HEADERS = ['ID','날짜','시간','일정','중국어 장소(간체)','이동수단','메모','구분','완료'];
+const HEADERS = ['ID','날짜','시간','일정','중국어 장소(간체)','이동수단','메모','구분','완료','주소(간체)','추천 음식','분류'];
 const HOTEL_HEADERS = ['숙소명','중국어 숙소명','중국어 주소','메모'];
 const SEAT_HEADERS = ['방향','좌석','이름'];
 const TRIP_DAYS = ['2026-12-05','2026-12-06','2026-12-07','2026-12-08'];
 const SERVICE = 'shanghai-family-trip-sync';
-const VERSION = 'v2.1';
+const VERSION = 'v2.2';
 const FAMILY_KEY_FALLBACK = ''; // 비워 두면 스크립트 속성 FAMILY_KEY만 사용. 저장소에는 항상 비워 둡니다.
 
 function doGet(){
@@ -69,7 +73,13 @@ function doPost(e){
           throw new Error('ID·날짜·일정 이름이 잘못되었습니다.');
         }
         ids[item.id] = true;
-        return [item.id,item.day,item.time,item.title,item.zh,item.transport,item.note,item.status,item.done?'TRUE':'FALSE']
+        const address = String(item.address||'').trim();
+        const foods = String(item.foods||'').trim();
+        const kind = String(item.kind||'').trim();
+        if(address.length > 300 || foods.length > 500 || kind.length > 20){
+          throw new Error('주소(300자)·추천 음식(500자)·분류(20자) 길이를 확인하세요.');
+        }
+        return [item.id,item.day,item.time,item.title,item.zh,item.transport,item.note,item.status,item.done?'TRUE':'FALSE',address,foods,kind]
           .map(v=>escapeCell(v));
       });
       writeSchedule(ss, rows, current.data.items.length);
@@ -108,13 +118,15 @@ function escapeCell(v){
 
 function scheduleSheet(ss){
   let sheet = ss.getSheetByName(SCHEDULE_TAB);
-  if(!sheet){
-    sheet = ss.insertSheet(SCHEDULE_TAB);
-    sheet.getRange(1,1,1,9).setValues([HEADERS]);
+  if(!sheet) sheet = ss.insertSheet(SCHEDULE_TAB);
+  // 기존 9열 헤더(v2.1 이전)를 12열로 자동 이전합니다. 데이터 행은 건드리지 않습니다.
+  const header = sheet.getRange(1,1,1,HEADERS.length).getDisplayValues()[0].map(v=>String(v||'').trim());
+  if(HEADERS.some((h,i)=>header[i] !== h)){
+    sheet.getRange(1,1,1,HEADERS.length).setNumberFormat('@').setValues([HEADERS]);
     sheet.setFrozenRows(1);
-    sheet.getRange('A:I').setNumberFormat('@');
-    sheet.getRange(1,1,1,9).setBackground('#173e42').setFontColor('#ffffff').setFontWeight('bold');
+    sheet.getRange(1,1,1,HEADERS.length).setBackground('#173e42').setFontColor('#ffffff').setFontWeight('bold');
     sheet.setColumnWidth(4,210); sheet.setColumnWidth(5,230); sheet.setColumnWidth(7,480);
+    sheet.setColumnWidth(10,300); sheet.setColumnWidth(11,340); sheet.setColumnWidth(12,80);
   }
   return sheet;
 }
@@ -124,7 +136,7 @@ function readSheet(ss, sheet){
   const lastRow = sheet.getLastRow();
   if(lastRow < 2) return {data:{version:1,items:[]}};
   const numRows = lastRow - 1;
-  const range = sheet.getRange(2,1,numRows,9);
+  const range = sheet.getRange(2,1,numRows,12);
   const display = range.getDisplayValues();
   const raw = range.getValues();
   const tz = ss.getSpreadsheetTimeZone();
@@ -159,7 +171,7 @@ function readSheet(ss, sheet){
       repairs.push({row:rowNo, col:3, value:time});
     }
     // 나머지 열에 시각·날짜로 변형된 셀이 있으면 화면에 보이는 텍스트 그대로 고정합니다.
-    for(let c=3; c<9; c++){
+    for(let c=3; c<12; c++){
       if(raw[r][c] instanceof Date) repairs.push({row:rowNo, col:c+1, value:String(d[c]||'').trim()});
     }
     items.push({
@@ -171,7 +183,10 @@ function readSheet(ss, sheet){
       transport: String(d[5]||'').trim(),
       note: String(d[6]||'').trim(),
       status: String(d[7]||'').trim() || '확인 필요',
-      done: isDone(d[8])
+      done: isDone(d[8]),
+      address: String(d[9]||'').trim(),
+      foods: String(d[10]||'').trim(),
+      kind: String(d[11]||'').trim()
     });
   }
   applyRepairs(sheet, numRows, repairs);
@@ -180,7 +195,7 @@ function readSheet(ss, sheet){
 
 /* 읽은 범위를 텍스트(@) 서식으로 고정하고 정규화한 값을 다시 써서 이후 입력이 변형되지 않게 합니다. */
 function applyRepairs(sheet, numRows, repairs){
-  if(numRows > 0) sheet.getRange(2,1,numRows,9).setNumberFormat('@');
+  if(numRows > 0) sheet.getRange(2,1,numRows,12).setNumberFormat('@');
   for(let i=0; i<repairs.length; i++){
     sheet.getRange(repairs[i].row, repairs[i].col).setValue(repairs[i].value);
   }
@@ -251,8 +266,8 @@ function hash(data){
 function writeSchedule(ss, rows, previousCount){
   const sheet = scheduleSheet(ss);
   const count = Math.max(rows.length, previousCount);
-  if(count > 0) sheet.getRange(2,1,count,9).clearContent().setNumberFormat('@');
-  if(rows.length) sheet.getRange(2,1,rows.length,9).setValues(rows).setWrap(true);
+  if(count > 0) sheet.getRange(2,1,count,12).clearContent().setNumberFormat('@');
+  if(rows.length) sheet.getRange(2,1,rows.length,12).setValues(rows).setWrap(true);
   SpreadsheetApp.flush();
 }
 

@@ -35,7 +35,7 @@ class MockSheet{
   getLastRow(){let last=0;for(const [k,v] of this.cells){if(v===''||v==null)continue;const r=Number(k.split(':')[0]);if(r>last)last=r;}return last;}
   getRange(a,b,c,d){
     if(typeof a==='string'){
-      const m=a.match(/^([A-I])(\d*)(?::([A-I])(\d*))?$/);
+      const m=a.match(/^([A-L])(\d*)(?::([A-L])(\d*))?$/);
       if(!m)throw new Error('지원하지 않는 범위: '+a);
       const c1=m[1].charCodeAt(0)-64,c2=m[3]?m[3].charCodeAt(0)-64:c1;
       const r1=m[2]?parseInt(m[2]):1,r2=m[4]?parseInt(m[4]):r1;
@@ -83,14 +83,15 @@ const src=readFileSync(new URL('../Code.gs',import.meta.url),'utf8');
 const factory=new Function('SpreadsheetApp','PropertiesService','LockService','ContentService','Utilities',
   src+'\n;return {doGet,doPost,normalizeDay,isDone};');
 
-const SCHEDULE_HEADER=['ID','날짜','시간','일정','중국어 장소(간체)','이동수단','메모','구분','완료'];
+const SCHEDULE_HEADER=['ID','날짜','시간','일정','중국어 장소(간체)','이동수단','메모','구분','완료','주소(간체)','추천 음식','분류'];
 const HOTEL_HEADER=['숙소명','중국어 숙소명','중국어 주소','메모'];
+const pad9=r=>[...r,'','',''];
 const BASE_ROWS=[
   SCHEDULE_HEADER,
-  ['item-1','2026-12-05','12:35','푸동공항 도착','上海浦东国际机场','','KE887 · 인천 11:10 출발 / 상하이 12:35 도착','기존','FALSE'],
-  ['item-2','2026-12-05','13:30~14:00','호텔로 이동','上海外滩璞硐酒店 北京东路398号','택시 / 예약 픽업','45~70분 소요','기존','FALSE'],
-  ['item-6','2026-12-06','08:00','호텔 조식','','','출발 전 화장실·물 준비','제안','FALSE'],
-  ['item-24','2026-12-08','14:00','상하이 출발 → 인천 도착','','','KE888 · 푸동 14:00 → 인천 17:10','기존','FALSE']
+  pad9(['item-1','2026-12-05','12:35','푸동공항 도착','上海浦东国际机场','','KE887 · 인천 11:10 출발 / 상하이 12:35 도착','기존','FALSE']),
+  pad9(['item-2','2026-12-05','13:30~14:00','호텔로 이동','上海外滩璞硐酒店 北京东路398号','택시 / 예약 픽업','45~70분 소요','기존','FALSE']),
+  pad9(['item-6','2026-12-06','08:00','호텔 조식','','','출발 전 화장실·물 준비','제안','FALSE']),
+  pad9(['item-24','2026-12-08','14:00','상하이 출발 → 인천 도착','','','KE888 · 푸동 14:00 → 인천 17:10','기존','FALSE'])
 ];
 const BASE_HOTEL=[
   HOTEL_HEADER,
@@ -124,12 +125,12 @@ section('0. ping — 키 없이 배포·권한 상태만 확인');
 {
   const env=makeEnv();
   const ping=JSON.parse(env.api.doGet().__text);
-  ok(ping.ok===true&&ping.service==='shanghai-family-trip-sync'&&ping.version==='v2.1','doGet ping이 서비스·버전을 반환');
+  ok(ping.ok===true&&ping.service==='shanghai-family-trip-sync'&&ping.version==='v2.2','doGet ping이 서비스·버전을 반환');
   ok(ping.spreadsheet==='상하이 가족여행(테스트)'&&ping.scheduleTab===true&&ping.hotelTab===true,'스프레드시트·두 연결 탭 접근 확인');
   ok(ping.seatsTab===false,'좌석 탭이 없으면 ping에 false');
   ok(!('items' in ping)&&!('data' in ping),'ping에는 일정·숙소 데이터가 없음');
   const viaPost=env.call({action:'ping'});
-  ok(viaPost.ok===true&&viaPost.version==='v2.1','POST ping도 동일하게 동작');
+  ok(viaPost.ok===true&&viaPost.version==='v2.2','POST ping도 동일하게 동작');
   ok(find(env,SCHEDULE_TAB).writes.length===0,'ping은 시트를 수정하지 않음');
   ok(env.opened[0]===SPREADSHEET_ID,'지정된 문서 ID로만 엶');
 }
@@ -250,7 +251,7 @@ section('8. 대시보드 → 시트 저장 (write)');
   const env=makeEnv();
   const read1=env.call({action:'read',key:TEST_KEY});
   const data=read1.data;
-  data.items.push({id:'item-99',day:'2026-12-06',time:'19:00',title:'테스트 추가 일정 [검증용]',zh:'外滩',transport:'도보',note:'검증 후 삭제',status:'확정',done:true});
+  data.items.push({id:'item-99',day:'2026-12-06',time:'19:00',title:'테스트 추가 일정 [검증용]',zh:'外滩',transport:'도보',note:'검증 후 삭제',status:'확정',done:true,address:'上海市黄浦区北京东路398号',foods:'小笼包(샤롱바오)·새우볶음밥',kind:'식당'});
   data.items=data.items.filter(i=>i.id!=='item-6');
   data.hotel.note='수정된 메모';
   const w=env.call({action:'write',key:TEST_KEY,revision:read1.revision,data});
@@ -263,10 +264,13 @@ section('8. 대시보드 → 시트 저장 (write)');
   ok(String(s.get(newRow,9))==='TRUE','완료 TRUE 저장');
   ok(String(s.get(newRow,8))==='확정','구분 저장');
   ok(String(s.get(newRow,5))==='外滩'&&String(s.get(newRow,6))==='도보','중국어 장소·이동수단 저장');
+  ok(String(s.get(newRow,10))==='上海市黄浦区北京东路398号'&&String(s.get(newRow,11))==='小笼包(샤롱바오)·새우볶음밥'&&String(s.get(newRow,12))==='식당','주소·추천 음식·분류(J·K·L열) 저장');
   ok(String(find(env,HOTEL_TAB).get(2,4))==='수정된 메모','숙소 메모 양방향 저장');
   ok(w.revision&&w.revision!==read1.revision,'저장 후 새 revision');
   const read2=env.call({action:'read',key:TEST_KEY});
   ok(read2.data.items.length===data.items.length&&read2.data.items.some(i=>i.id==='item-99'),'저장 직후 읽기가 저장 내용과 일치');
+  const back99=read2.data.items.find(i=>i.id==='item-99');
+  ok(back99.address==='上海市黄浦区北京东路398号'&&back99.foods==='小笼包(샤롱바오)·새우볶음밥'&&back99.kind==='식당','주소·음식·분류 왕복 보존');
   ok(find(env,ORIGIN_TAB).writes.length===0,'write 중에도 원본 시트1 untouched');
   ok(env.stats.flushes>=1,'변경 후 flush 호출');
   ok(env.lockSt.wait===3&&env.lockSt.release===3,'잠금 획득·해제 (read+write+read 3회)');
@@ -412,6 +416,37 @@ section('16. 좌석 동기화 — ‘대시보드 좌석’ 탭 양방향');
   const cleared=empty.call({action:'write',key:TEST_KEY,revision:r4.revision,data:{items:r4.data.items,hotel:r4.data.hotel,flights:{outbound:{seats:[]},inbound:{seats:[]}}}});
   ok(cleared.ok===true&&!cleared.data.flights,'빈 좌석 목록 저장 시 좌석 탭 비움(삭제 경로)');
   ok(find(env,ORIGIN_TAB).writes.length===0&&find(empty,ORIGIN_TAB).writes.length===0,'좌석 작업 중에도 원본 시트1 untouched');
+}
+
+section('17. v2.2 확장 열 — 주소·추천 음식·분류, 기존 9열 시트 자동 이전');
+{
+  const OLD_HEADER=['ID','날짜','시간','일정','중국어 장소(간체)','이동수단','메모','구분','완료'];
+  const rows9=[OLD_HEADER,...BASE_ROWS.slice(1).map(r=>r.slice(0,9))];
+  const env=makeEnv({rows:rows9});
+  const s=find(env,SCHEDULE_TAB);
+  const r=env.call({action:'read',key:TEST_KEY});
+  ok(r.ok===true&&r.data.items.length===4,'기존 9열 시트도 12열 읽기로 정상 동작');
+  ok(String(s.get(1,10))==='주소(간체)'&&String(s.get(1,11))==='추천 음식'&&String(s.get(1,12))==='분류','헤더를 J·K·L 열까지 자동 이전');
+  ok(String(s.get(2,4))==='푸동공항 도착','헤더 이전 시 데이터 행은 그대로 보존');
+  ok(r.data.items[0].address===''&&r.data.items[0].foods===''&&r.data.items[0].kind==='','비어 있는 확장 열은 빈 문자열');
+  s.getRange(2,10).setValue('上海市黄浦区九江路399号');
+  s.getRange(2,12).setValue('식당');
+  const r2=env.call({action:'read',key:TEST_KEY});
+  ok(r2.data.items[0].address==='上海市黄浦区九江路399号'&&r2.data.items[0].kind==='식당','시트에서 직접 입력한 주소·분류 반영');
+  const data=JSON.parse(JSON.stringify(r2.data));
+  data.items[0].foods='糖醋鱼(탕추위)';
+  const w=env.call({action:'write',key:TEST_KEY,revision:r2.revision,data});
+  ok(w.ok===true&&w.data.items[0].foods==='糖醋鱼(탕추위)'&&String(s.get(2,11))==='糖醋鱼(탕추위)','추천 음식 양방향 저장');
+  const long=JSON.parse(JSON.stringify(w.data));
+  long.items[0].kind='아주 긴 분류값이라서 허용되지 않는 경우입니다';
+  const w2=env.call({action:'write',key:TEST_KEY,revision:w.revision,data:long});
+  ok(w2.ok===false&&/길이/.test(w2.error),'분류 20자 초과 저장 거부');
+  ok(String(s.get(2,12))==='식당','거부 시 시트 값 유지');
+  const env3=makeEnv();
+  const s3=find(env3,SCHEDULE_TAB);
+  const writesBefore=s3.writes.length;
+  env3.call({action:'read',key:TEST_KEY});
+  ok(s3.writes.length===writesBefore,'이미 12열 헤더면 헤더 재기록 없음');
 }
 
 console.log('\n──────────────────────────────');
