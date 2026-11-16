@@ -60,3 +60,7 @@ button.copy{font-size:11px;padding:3px 9px;border-radius:7px;white-space:nowrap}
 #fold{font-size:12px;padding:6px 10px}
 @media(max-width:760px){.badges{gap:3px}.kind{font-size:9px;padding:2px 6px}.party{font-size:9px;padding:2px 6px}.foods{font-size:12px}.addr{font-size:12px}.button.copy{font-size:10px;padding:2px 7px}.detail summary{font-size:11px}.event{grid-template-columns:58px 1fr;gap:8px;padding:14px 16px}.event .time{font-size:11px}.event h3{font-size:15px}.event p{font-size:12px;margin:6px 0}.event .actions{gap:6px}.event button{font-size:11px;padding:5px 8px}}
 @media print{.details .detail{display:block}.detail summary{display:none}.detail-body{display:block}.detail-body>*{display:block}#fold,.view-controls{display:none!important}}
+
+/* 후기/메뉴 URL 링크 */
+.detail-body a,.table-wrap td a{color:#447977;text-decoration:underline;word-break:break-all;font-weight:700}
+.detail-body a:hover,.table-wrap td a:hover{color:var(--ink)}
